@@ -98,22 +98,19 @@
   })();
   </script>
   <script>
-    // Robust text-only visitor counter with CORS + JSONP fallback
-    (function(){
+    // Visitor counter: run AFTER the DOM exists so #vc is present
+    window.addEventListener('DOMContentLoaded', function(){
       const el = document.getElementById('vc');
       if (!el) return;
-      const NS = 'jeanmhuang.github.io';
-      const KEY = 'RewildRush';
-      const URL = `https://api.countapi.xyz/hit/${encodeURIComponent(NS)}/${encodeURIComponent(KEY)}`;
+      const URL = 'https://api.countapi.xyz/hit/jeanmhuang.github.io/RewildRush';
+      function setCount(n){ el.textContent = (typeof n === 'number') ? n.toLocaleString() : '—'; }
 
-      function setCount(n){ el.textContent = typeof n === 'number' ? n.toLocaleString() : '—'; }
-
-      // 1) Try fetch with CORS
+      // Try fetch first
       fetch(URL, { cache: 'no-store' })
         .then(r => r.ok ? r.json() : Promise.reject(new Error('bad status ' + r.status)))
         .then(d => setCount(d.value ?? d.count))
         .catch(() => {
-          // 2) Fallback to JSONP (works even if CORS blocks fetch)
+          // Fallback: JSONP for environments that block CORS
           const cb = 'countapi_cb_' + Math.random().toString(36).slice(2);
           window[cb] = function(d){ setCount(d && (d.value ?? d.count)); try{ delete window[cb]; }catch(_){} };
           const s = document.createElement('script');
@@ -121,7 +118,7 @@
           s.onerror = function(){ setCount(); };
           document.body.appendChild(s);
         });
-    })();
+    });
   </script>
   <footer>
     Visitor Counter: <span id="vc">…</span>
@@ -129,5 +126,6 @@
 </div>
 </body>
 </html>
+
 
 
