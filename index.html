@@ -99,19 +99,24 @@
   </script>
   <script>
     // Simple text-based visitor counter using CountAPI (no images)
-    (async function(){
+    window.addEventListener('DOMContentLoaded', async () => {
       try {
+        const span = document.getElementById('vc');
+        if (!span) return;
         const res = await fetch('https://api.countapi.xyz/hit/jeanmhuang.github.io/RewildRush');
         const data = await res.json();
-        const el = document.getElementById('vc');
-        if (el && typeof data.value === 'number') {
-          el.textContent = data.value.toLocaleString();
+        if (typeof data.value === 'number') {
+          span.textContent = data.value.toLocaleString();
+        } else if (typeof data.count === 'number') { // some responses use 'count'
+          span.textContent = data.count.toLocaleString();
+        } else {
+          span.textContent = '—';
         }
       } catch (e) {
-        const el = document.getElementById('vc');
-        if (el) el.textContent = '—';
+        const span = document.getElementById('vc');
+        if (span) span.textContent = '—';
       }
-    })();
+    });
   </script>
   <footer>
     Visitor Counter: <span id="vc">…</span>
@@ -119,6 +124,7 @@
 </div>
 </body>
 </html>
+
 
 
 
