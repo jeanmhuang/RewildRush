@@ -97,11 +97,28 @@
     start();
   })();
   </script>
+  <script>
+    // Simple text-based visitor counter using CountAPI (no images)
+    (async function(){
+      try {
+        const res = await fetch('https://api.countapi.xyz/hit/jeanmhuang.github.io/RewildRush');
+        const data = await res.json();
+        const el = document.getElementById('vc');
+        if (el && typeof data.value === 'number') {
+          el.textContent = data.value.toLocaleString();
+        }
+      } catch (e) {
+        const el = document.getElementById('vc');
+        if (el) el.textContent = '—';
+      }
+    })();
+  </script>
   <footer>
-    Visitor Counter: <img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fjeanmhuang.github.io%2FRewildRush%2F&count_bg=%236ee7b7&title_bg=%230a1525&icon=&icon_color=%23ffffff&title=Visitors&edge_flat=false" alt="Visitors" />
+    Visitor Counter: <span id="vc">…</span>
   </footer>
 </div>
 </body>
 </html>
+
 
 
