@@ -5,24 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Rewild Rush — Balance the Valley</title>
 <meta name="description" content="A tiny rewilding game. Balance deer and wolves to keep plants healthy and biodiversity high." />
-<!-- Open Graph for rich link previews (LinkedIn, Facebook) -->
 <meta property="og:type" content="website" />
 <meta property="og:title" content="Rewild Rush — Balance the Valley" />
 <meta property="og:description" content="A tiny rewilding game. Balance deer and wolves to keep plants healthy and biodiversity high." />
 <meta property="og:url" content="https://jeanmhuang.github.io/RewildRush/" />
 <meta property="og:image" content="https://raw.githubusercontent.com/jeanmhuang/RewildRush/main/thumbnail.png" />
 <meta property="og:image:alt" content="Rewild Rush thumbnail showing a stylized valley with plants, deer, and wolves" />
-<meta property="og:image:width" content="1200" />
-<meta property="og:image:height" content="630" />
-<!-- Twitter cards -->
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="Rewild Rush — Balance the Valley" />
 <meta name="twitter:description" content="A tiny rewilding game. Balance deer and wolves to keep plants healthy and biodiversity high." />
 <meta name="twitter:image" content="https://raw.githubusercontent.com/jeanmhuang/RewildRush/main/thumbnail.png" />
-<link rel="canonical" href="https://jeanmhuang.github.io/RewildRush/" />
-<!-- Favicon and app icons -->
 <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/jeanmhuang/RewildRush/main/thumbnail.png" />
-<link rel="apple-touch-icon" href="https://raw.githubusercontent.com/jeanmhuang/RewildRush/main/thumbnail.png" />
 <meta name="theme-color" content="#0b1726" />
 <style>
   :root{--bg:#0b1726;--panel:#0a1525;--ink:#f5f7fb;--muted:#a8b3cf;--btn:#17263f;--line:rgba(255,255,255,.1);} 
@@ -43,6 +36,7 @@
   .deer-dot{background:#fcd34d;}
   .wolf-dot{background:#93c5fd;}
   .error{color:#fda4af;text-align:center;font-size:12px;min-height:16px}
+  footer{text-align:center;margin-top:20px;color:#a8b3cf;font-size:13px}
 </style>
 </head>
 <body>
@@ -78,159 +72,36 @@
   <div class="error" id="err"></div>
   <script>
   (function(){
-    // --- Grid & state ---
-    const GRID_W = 48, GRID_H = 32, CELL = 16; // 768x512 canvas
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
-    let plants = new Array(GRID_W*GRID_H).fill(0); // biomass 0..6
-    let deer = [];   // {x,y,energy}
-    let wolves = []; // {x,y,energy}
-    let score = 0, tick = 0;
-    let tool = 'deer';
-    let paused = false;
-    let stepTimer = null;
-
-    // --- Helpers ---
-    const idx=(x,y)=> y*GRID_W + x;
-    const clamp=(v,min,max)=> v<min?min:(v>max?max:v);
-    function plantCover(){ let n=0; for(let i=0;i<plants.length;i++){ if(plants[i]>0) n++; } return Math.round((n/(GRID_W*GRID_H))*100); }
-    function setTool(t){ tool=t; const ids=['tool-deer','tool-wolf','tool-grow','tool-remove']; for(const id of ids){ const el=document.getElementById(id); if(el) el.dataset.active=(id==='tool-'+t); } }
-    function error(msg){ const el=document.getElementById('err'); if(el) el.textContent = msg||''; }
-    function updateHUD(){ const hud=document.getElementById('hud'); if(hud) hud.textContent = 'Plants: '+plantCover()+'% | Deer: '+deer.length+' | Wolves: '+wolves.length+' | Score: '+score; }
-
-    // --- Seed world ---
-    function seed(){
-      for(let i=0;i<plants.length;i++) plants[i]=0;
-      for(let y=0;y<GRID_H;y++){
-        for(let x=0;x<GRID_W;x++){
-          const base = 2 + Math.sin((y/GRID_H)*Math.PI)*2; // greener mid-band
-          const bonus = Math.random()<0.12?2:0;
-          let val = Math.round(base+bonus);
-          if(val<0) val=0; if(val>5) val=5;
-          plants[idx(x,y)] = val;
-        }
-      }
-      deer = [{x:10,y:16,energy:8},{x:14,y:14,energy:8}];
-      wolves = [{x:38,y:16,energy:12}];
-      score=0; tick=0; paused=false; setTool('deer');
-      updateHUD();
-    }
-
-    // --- Simulation ---
-    function step(){
-      if(paused) return;
-      tick++;
-      // plants grow
-      for(let i=0;i<plants.length;i++){
-        const p = plants[i];
-        if(p<6){ const g = (p<=2)?0.55:((p<=4)?0.35:0.15); if(Math.random()<g) plants[i]=p+1; }
-      }
-      // deer
-      const nd=[];
-      for(const d of deer){
-        // move toward greener cell
-        let bx=d.x, by=d.y, bp=plants[idx(d.x,d.y)];
-        for(let s=0;s<3;s++){
-          const nx = clamp(d.x + (Math.floor(Math.random()*3)-1), 0, GRID_W-1);
-          const ny = clamp(d.y + (Math.floor(Math.random()*3)-1), 0, GRID_H-1);
-          const pp = plants[idx(nx,ny)]; if(pp>bp){ bx=nx; by=ny; bp=pp; }
-        }
-        d.x=bx; d.y=by;
-        const ii=idx(d.x,d.y);
-        if(plants[ii]>0){ plants[ii]--; d.energy = Math.min(d.energy+2,14); } else d.energy-=2;
-        if(d.energy>=12 && Math.random()<0.18){ nd.push({x:d.x,y:d.y,energy:8}); d.energy=9; }
-        if(d.energy>0) nd.push(d);
-      }
-      deer=nd;
-      // wolves
-      const nw=[];
-      for(const w of wolves){
-        let target=null, best=9999;
-        for(const d of deer){ const dist=Math.abs(d.x-w.x)+Math.abs(d.y-w.y); if(dist<best && dist<=5){ best=dist; target=d; } }
-        if(target){ w.x += Math.sign(target.x - w.x); w.y += Math.sign(target.y - w.y); }
-        else { w.x = clamp(w.x + (Math.floor(Math.random()*3)-1),0,GRID_W-1); w.y = clamp(w.y + (Math.floor(Math.random()*3)-1),0,GRID_H-1); }
-
-        let ate=false;
-        for(let i=0;i<deer.length;i++){
-          const d=deer[i];
-          if(d.x===w.x && d.y===w.y){ deer.splice(i,1); w.energy = Math.min(w.energy+8,18); ate=true; break; }
-        }
-        if(!ate) w.energy -= 2;
-        if(w.energy>=16 && Math.random()<0.12){ nw.push({x:w.x,y:w.y,energy:12}); w.energy=12; }
-        if(w.energy>0) nw.push(w);
-      }
-      wolves=nw;
-
-      // score
-      const cover=plantCover();
-      if(cover>40 && cover<80 && deer.length>0 && wolves.length>0) score++;
-      updateHUD();
-    }
-
-    // --- Render ---
-    function draw(){
-      try{
-        ctx.clearRect(0,0,canvas.width,canvas.height);
-        for(let y=0;y<GRID_H;y++){
-          for(let x=0;x<GRID_W;x++){
-            const p=plants[idx(x,y)];
-            ctx.fillStyle = p>0 ? 'rgba('+(30+p*4)+','+(90+p*25)+',90,1)' : 'rgba(25,35,55,0.8)';
-            ctx.fillRect(x*CELL,y*CELL,CELL,CELL);
-          }
-        }
-        // grid
-        ctx.strokeStyle='rgba(255,255,255,0.03)';
-        ctx.lineWidth=1;
-        for(let gx=0;gx<=GRID_W;gx++){ctx.beginPath();ctx.moveTo(gx*CELL+0.5,0);ctx.lineTo(gx*CELL+0.5,GRID_H*CELL);ctx.stroke();}
-        for(let gy=0;gy<=GRID_H;gy++){ctx.beginPath();ctx.moveTo(0,gy*CELL+0.5);ctx.lineTo(GRID_W*CELL,gy*CELL+0.5);ctx.stroke();}
-        // deer
-        for(const d of deer){ ctx.fillStyle='#fcd34d'; ctx.beginPath(); ctx.arc(d.x*CELL+CELL/2,d.y*CELL+CELL/2, CELL*0.28, 0, Math.PI*2); ctx.fill(); }
-        // wolves
-        for(const w of wolves){ ctx.fillStyle='#93c5fd'; ctx.beginPath(); ctx.arc(w.x*CELL+CELL/2,w.y*CELL+CELL/2, CELL*0.32, 0, Math.PI*2); ctx.fill(); }
-        requestAnimationFrame(draw);
-      }catch(e){ error('Render error: '+e.message); }
-    }
-
-    // --- Controls ---
+    const GRID_W=48, GRID_H=32, CELL=16;
+    const canvas=document.getElementById('game');
+    const ctx=canvas.getContext('2d');
+    let plants=new Array(GRID_W*GRID_H).fill(0);
+    let deer=[], wolves=[];
+    let score=0, tick=0, tool='deer', paused=false, stepTimer=null;
+    const idx=(x,y)=>y*GRID_W+x;
+    const clamp=(v,min,max)=>v<min?min:(v>max?max:v);
+    function plantCover(){let n=0;for(let i=0;i<plants.length;i++){if(plants[i]>0)n++;}return Math.round((n/(GRID_W*GRID_H))*100);}
+    function setTool(t){tool=t;const ids=['tool-deer','tool-wolf','tool-grow','tool-remove'];for(const id of ids){const el=document.getElementById(id);if(el)el.dataset.active=(id==='tool-'+t);}}
+    function updateHUD(){const hud=document.getElementById('hud');if(hud)hud.textContent='Plants: '+plantCover()+'% | Deer: '+deer.length+' | Wolves: '+wolves.length+' | Score: '+score;}
+    function seed(){for(let i=0;i<plants.length;i++)plants[i]=0;for(let y=0;y<GRID_H;y++){for(let x=0;x<GRID_W;x++){const base=2+Math.sin((y/GRID_H)*Math.PI)*2;const bonus=Math.random()<0.12?2:0;let val=Math.round(base+bonus);if(val<0)val=0;if(val>5)val=5;plants[idx(x,y)]=val;}}deer=[{x:10,y:16,energy:8},{x:14,y:14,energy:8}];wolves=[{x:38,y:16,energy:12}];score=0;tick=0;paused=false;setTool('deer');updateHUD();}
+    function step(){if(paused)return;tick++;for(let i=0;i<plants.length;i++){const p=plants[i];if(p<6){const g=(p<=2)?0.55:((p<=4)?0.35:0.15);if(Math.random()<g)plants[i]=p+1;}}const nd=[];for(const d of deer){let bx=d.x,by=d.y,bp=plants[idx(d.x,d.y)];for(let s=0;s<3;s++){const nx=clamp(d.x+(Math.floor(Math.random()*3)-1),0,GRID_W-1);const ny=clamp(d.y+(Math.floor(Math.random()*3)-1),0,GRID_H-1);const pp=plants[idx(nx,ny)];if(pp>bp){bx=nx;by=ny;bp=pp;}}d.x=bx;d.y=by;const ii=idx(d.x,d.y);if(plants[ii]>0){plants[ii]--;d.energy=Math.min(d.energy+2,14);}else d.energy-=2;if(d.energy>=12&&Math.random()<0.18){nd.push({x:d.x,y:d.y,energy:8});d.energy=9;}if(d.energy>0)nd.push(d);}deer=nd;const nw=[];for(const w of wolves){let target=null,best=9999;for(const d of deer){const dist=Math.abs(d.x-w.x)+Math.abs(d.y-w.y);if(dist<best&&dist<=5){best=dist;target=d;}}if(target){w.x+=Math.sign(target.x-w.x);w.y+=Math.sign(target.y-w.y);}else{w.x=clamp(w.x+(Math.floor(Math.random()*3)-1),0,GRID_W-1);w.y=clamp(w.y+(Math.floor(Math.random()*3)-1),0,GRID_H-1);}let ate=false;for(let i=0;i<deer.length;i++){const d=deer[i];if(d.x===w.x&&d.y===w.y){deer.splice(i,1);w.energy=Math.min(w.energy+8,18);ate=true;break;}}if(!ate)w.energy-=2;if(w.energy>=16&&Math.random()<0.12){nw.push({x:w.x,y:w.y,energy:12});w.energy=12;}if(w.energy>0)nw.push(w);}wolves=nw;const cover=plantCover();if(cover>40&&cover<80&&deer.length>0&&wolves.length>0)score++;updateHUD();}
+    function draw(){ctx.clearRect(0,0,canvas.width,canvas.height);for(let y=0;y<GRID_H;y++){for(let x=0;x<GRID_W;x++){const p=plants[idx(x,y)];ctx.fillStyle=p>0?'rgba('+(30+p*4)+','+(90+p*25)+',90,1)':'rgba(25,35,55,0.8)';ctx.fillRect(x*CELL,y*CELL,CELL,CELL);}}ctx.strokeStyle='rgba(255,255,255,0.03)';ctx.lineWidth=1;for(let gx=0;gx<=GRID_W;gx++){ctx.beginPath();ctx.moveTo(gx*CELL+0.5,0);ctx.lineTo(gx*CELL+0.5,GRID_H*CELL);ctx.stroke();}for(let gy=0;gy<=GRID_H;gy++){ctx.beginPath();ctx.moveTo(0,gy*CELL+0.5);ctx.lineTo(GRID_W*CELL,gy*CELL+0.5);ctx.stroke();}for(const d of deer){ctx.fillStyle='#fcd34d';ctx.beginPath();ctx.arc(d.x*CELL+CELL/2,d.y*CELL+CELL/2,CELL*0.28,0,Math.PI*2);ctx.fill();}for(const w of wolves){ctx.fillStyle='#93c5fd';ctx.beginPath();ctx.arc(w.x*CELL+CELL/2,w.y*CELL+CELL/2,CELL*0.32,0,Math.PI*2);ctx.fill();}requestAnimationFrame(draw);}
     document.getElementById('tool-deer').onclick=()=>setTool('deer');
     document.getElementById('tool-wolf').onclick=()=>setTool('wolf');
     document.getElementById('tool-grow').onclick=()=>setTool('grow');
     document.getElementById('tool-remove').onclick=()=>setTool('remove');
     document.getElementById('btn-reset').onclick=()=>seed();
-    document.getElementById('btn-pause').onclick=function(){ paused=!paused; this.textContent = paused?'▶️ Resume':'⏸️ Pause'; };
-
-    canvas.addEventListener('click', (e)=>{
-      const r=canvas.getBoundingClientRect();
-      const x=clamp(Math.floor((e.clientX-r.left)/CELL),0,GRID_W-1);
-      const y=clamp(Math.floor((e.clientY-r.top)/CELL),0,GRID_H-1);
-      if(tool==='deer') deer.push({x,y,energy:8});
-      else if(tool==='wolf') wolves.push({x,y,energy:12});
-      else if(tool==='grow'){
-        for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
-          const nx=x+dx, ny=y+dy; if(nx>=0&&ny>=0&&nx<GRID_W&&ny<GRID_H){ plants[idx(nx,ny)] = Math.min(plants[idx(nx,ny)]+2,6); }
-        }
-      } else if(tool==='remove'){
-        for(let i=0;i<wolves.length;i++){ if(wolves[i].x===x && wolves[i].y===y){ wolves.splice(i,1); updateHUD(); return; } }
-        for(let j=0;j<deer.length;j++){ if(deer[j].x===x && deer[j].y===y){ deer.splice(j,1); updateHUD(); return; } }
-      }
-      updateHUD();
-    });
-
-    // --- Loop ---
-    function start(){
-      try{
-        seed();
-        if(stepTimer) clearInterval(stepTimer);
-        stepTimer = setInterval(step, 500); // slower for clarity
-        requestAnimationFrame(draw);
-        error('');
-      }catch(e){ error('Init error: '+e.message); }
-    }
-
+    document.getElementById('btn-pause').onclick=function(){paused=!paused;this.textContent=paused?'▶️ Resume':'⏸️ Pause';};
+    canvas.addEventListener('click',(e)=>{const r=canvas.getBoundingClientRect();const x=clamp(Math.floor((e.clientX-r.left)/CELL),0,GRID_W-1);const y=clamp(Math.floor((e.clientY-r.top)/CELL),0,GRID_H-1);if(tool==='deer')deer.push({x,y,energy:8});else if(tool==='wolf')wolves.push({x,y,energy:12});else if(tool==='grow'){for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=x+dx,ny=y+dy;if(nx>=0&&ny>=0&&nx<GRID_W&&ny<GRID_H){plants[idx(nx,ny)]=Math.min(plants[idx(nx,ny)]+2,6);}}}else if(tool==='remove'){for(let i=0;i<wolves.length;i++){if(wolves[i].x===x&&wolves[i].y===y){wolves.splice(i,1);updateHUD();return;}}for(let j=0;j<deer.length;j++){if(deer[j].x===x&&deer[j].y===y){deer.splice(j,1);updateHUD();return;}}}updateHUD();});
+    function start(){seed();if(stepTimer)clearInterval(stepTimer);stepTimer=setInterval(step,500);requestAnimationFrame(draw);}
     start();
   })();
   </script>
+  <footer>
+    Visitor Counter: <img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fjeanmhuang.github.io%2FRewildRush%2F&count_bg=%236ee7b7&title_bg=%230a1525&icon=leaf.svg&icon_color=%23ffffff&edge_flat=false" alt="Visitor Count" />
+  </footer>
 </div>
 </body>
 </html>
+
 
